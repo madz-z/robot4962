@@ -1,16 +1,15 @@
-#pragma config(Hubs,  S1, HTMotor,  HTMotor,  HTMotor,  HTMotor)
-#pragma config(Hubs,  S2, HTServo,  none,     none,     none)
-#pragma config(Sensor, S1,     ,               sensorI2CMuxController)
-#pragma config(Sensor, S2,     ,               sensorI2CMuxController)
+#pragma config(Hubs,  S1, HTMotor,  HTMotor,  HTMotor,  none)
+#pragma config(Hubs,  S2, HTServo,  HTMotor,  none,     none)
+#pragma config(Sensor, S3,     accel,          sensorI2CHiTechnicAccel)
 #pragma config(Sensor, S4,     gyro,           sensorI2CHiTechnicGyro)
 #pragma config(Motor,  mtr_S1_C1_1,     motorLF,       tmotorTetrix, openLoop, reversed, driveLeft, encoder)
 #pragma config(Motor,  mtr_S1_C1_2,     motorLR,       tmotorTetrix, openLoop, reversed, driveLeft, encoder)
 #pragma config(Motor,  mtr_S1_C2_1,     motorRF,       tmotorTetrix, openLoop, driveRight, encoder)
 #pragma config(Motor,  mtr_S1_C2_2,     motorRR,       tmotorTetrix, openLoop, driveRight, encoder)
-#pragma config(Motor,  mtr_S1_C3_1,     motorArm1,     tmotorTetrix, openLoop, encoder)
-#pragma config(Motor,  mtr_S1_C3_2,     motorArm2,     tmotorTetrix, openLoop, reversed, encoder)
-#pragma config(Motor,  mtr_S1_C4_1,     motorJ,        tmotorTetrix, openLoop, encoder)
-#pragma config(Motor,  mtr_S1_C4_2,     motorK,        tmotorTetrix, openLoop, encoder)
+#pragma config(Motor,  mtr_S1_C3_1,     motorArm1,     tmotorTetrix, openLoop)
+#pragma config(Motor,  mtr_S1_C3_2,     motorArm2,     tmotorTetrix, openLoop, reversed)
+#pragma config(Motor,  mtr_S2_C2_1,     motorLift1,    tmotorTetrix, openLoop)
+#pragma config(Motor,  mtr_S2_C2_2,     motorLift2,    tmotorTetrix, openLoop, reversed)
 #pragma config(Servo,  srvo_S2_C1_1,    servo_tilt,           tServoStandard)
 #pragma config(Servo,  srvo_S2_C1_2,    servo_spin,           tServoContinuousRotation)
 #pragma config(Servo,  srvo_S2_C1_3,    servo3,               tServoStandard)
@@ -35,7 +34,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "JoystickDriver.c"  //Include file to "handle" the Bluetooth messages.
-
+#include "hitechnic-accelerometer.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -53,13 +52,16 @@ void initializeRobot()
 	// Place code here to sinitialize servos to starting positions.
 	// Sensors are automatically configured and setup by ROBOTC. They may need a brief time to stabilize.
 	playSound(soundFastUpwardTones);
-  	servo[servo_spin] = 127;
-clearDebugStream();
-   servo[servo3] = 0;
-   sleep(500);
-   servo[servo3] = 180;
-   sleep(500);
-   servo[servo3] = 0;
+	servo[servo_tilt] = 0;
+	servo[servo_spin] = 127;
+	clearDebugStream();
+	servo[servo3] = 0;
+	//   sleep(500);
+	//  servo[servo3] = 180;
+	// sleep(500);
+	// servo[servo3] = 0;
+	motor[motorLift1] = 10;
+	motor[motorLift2] = 10;
 	return;
 }
 
@@ -93,6 +95,13 @@ clearDebugStream();
 
 task main()
 {
+
+	// Create struct to hold accelerometer sensor data
+	tHTAC accelerometer;
+
+	// Initialise and configure struct and port
+	initSensor(&accelerometer, S3);
+
 	initializeRobot();
 	//
 	//  waitForStart();   // wait for start of tele-op phase
@@ -111,6 +120,8 @@ task main()
 		getJoystickSettings(joystick);
 		int deadzone = 20;
 
+		//Tank Drive - Left side
+
 		if (abs(joystick.joy1_y1) > abs(deadzone)) {
 			playSound(soundBlip);
 			displayBigTextLine(3, "%d, %d", joystick.joy1_y1/1.28, joystick.joy1_y2/1.28);
@@ -121,6 +132,8 @@ task main()
 			motor[motorRR] = 0;
 		}
 
+		//Tank Drive - Right Side
+
 		if (abs(joystick.joy1_y2) > abs (deadzone)) {
 			motor[motorLF] = -joystick.joy1_y2/1.28;
 			motor[motorLR] = -joystick.joy1_y2/1.28;
@@ -128,6 +141,9 @@ task main()
 			motor[motorLF] = 0;
 			motor[motorLR] = 0;
 		}
+
+		// Arm up and down
+
 		if (joystick.joy2_y1 > deadzone) {
 			motor[motorArm1] = 30; //down
 			motor[motorArm2] = 30; //down
@@ -135,14 +151,28 @@ task main()
 			motor[motorArm1] = -60; //up
 			motor[motorArm2] = -60; //up
 			} else {
-			motor[motorArm1] = 0;
-			motor[motorArm2] = 0;
+			// stop unless a button is overriding it
+			if (joy2Btn(7)== 0) {
+				motor[motorArm1] = 0;
+				motor[motorArm2] = 0;
+			}
+		}
+
+		//lift up and down
+
+		if (joystick.joy2_y2 > deadzone) {
+			motor[motorLift1] = 60; //down
+			motor[motorLift2] = 60; //down
+			} else if (joystick.joy2_y2 < -deadzone) {
+			motor[motorLift1] = -60; //up
+			motor[motorLift2] = -60; //up
+			} else {
+			motor[motorLift1] = 0;
+			motor[motorLift2] = 0;
 		}
 
 
-
-
-
+		/*
 		if (joystick.joy2_y2 > deadzone) {
 		servo[servo_tilt] = 130;
 		} else if (joystick.joy2_y2 < -deadzone) {
@@ -150,45 +180,70 @@ task main()
 		} else {
 		servo[servo_tilt] = 120;
 		}
+		*/
+
+		// intake control
+		//     (1) in/counter clockwise
+		//	   (2) out/clockwise
 
 		if (joy2Btn(1) == 1) {
-			//playSound(soundFastUpwardTones);
-			servo[servo_spin] = 0;  // clockwise?
-		} else if (joy2Btn(2) == 1) {
-			//playSound(soundFastUpwardTones);
-			servo[servo_spin] = 255;  //
-		} else {
-			servo[servo_spin] = 127;
-	  }
-	  if (joy2Btn(3) == 1) {
-	  	// go to position -- 1120 ticks is one rotation for AndyMark Neverest
-	    //but divide by our 3:1 gear ratio, so 373.33 = 360 degrees
-	    	nMotorEncoder[motorArm1] = 0;
-	      nMotorEncoder[motorArm2] = 0;
-
-	      nMotorEncoderTarget[motorArm1] = 43;
-      	nMotorEncoderTarget[motorArm2] = 43;
-
-      	motor[motorArm1] = 20;
-      	motor[motorArm2] = 20;
-      	sleep(1000);
-      	writeDebugStreamLine("arm = %d\n",nMotorEncoder[motorArm1]);
-    }
-    	  if (joy2Btn(4) == 1) {
-	  	// go to position -- 1120 ticks is one rotation for AndyMark Neverest
-	    	nMotorEncoder[motorArm1] = 0;
-	      nMotorEncoder[motorArm2] = 0;
-
-	      nMotorEncoderTarget[motorArm1] = -43;
-      	nMotorEncoderTarget[motorArm2] = -43;
-
-      	motor[motorArm1] = -20;
-      	motor[motorArm2] = -20;
+			servo[servo_spin] = 0;  // counter clockwise
+			} else if (joy2Btn(2) == 1) {
+			servo[servo_spin] = 255;  // clockwise
+			} else {
+			servo[servo_spin] = 127;  // stop
+		}
 
 
-      	sleep(1000);
-      	writeDebugStreamLine("arm = %d\n",nMotorEncoder[motorArm1]);
-    }
+		// x = 0 horizontal
+		// x = 187 vertical
+		// x = -145 start position\
+		// x = -180 lowest
+
+		if (joy2Btn(7)== 1 && readSensor(&accelerometer)) {
+			writeDebugStreamLine("accel = %d\n",accelerometer.x);
+			if (accelerometer.x < 185 && accelerometer.z > 0) {
+				motor[motorArm1] = -30; //up
+				motor[motorArm2] = -30; //up
+				} else if (accelerometer.x < 185 && accelerometer.z < 0) {
+				motor[motorArm1] = 30;
+				motor[motorArm2] = 30;
+				} else {
+				motor[motorArm1] = 0;
+				motor[motorArm2] = 0;
+			}
+		}
+		/*
+		if (joy2Btn(3) == 1) {
+		// go to position -- 1120 ticks is one rotation for AndyMark Neverest
+		//but divide by our 3:1 gear ratio, so 373.33 = 360 degrees
+		nMotorEncoder[motorArm1] = 0;
+		nMotorEncoder[motorArm2] = 0;
+
+		nMotorEncoderTarget[motorArm1] = 43;
+		nMotorEncoderTarget[motorArm2] = 43;
+
+		motor[motorArm1] = 20;
+		motor[motorArm2] = 20;
+		sleep(1000);
+		writeDebugStreamLine("arm = %d\n",nMotorEncoder[motorArm1]);
+		}
+		if (joy2Btn(4) == 1) {
+		// go to position -- 1120 ticks is one rotation for AndyMark Neverest
+		nMotorEncoder[motorArm1] = 0;
+		nMotorEncoder[motorArm2] = 0;
+
+		nMotorEncoderTarget[motorArm1] = -43;
+		nMotorEncoderTarget[motorArm2] = -43;
+
+		motor[motorArm1] = -20;
+		motor[motorArm2] = -20;
+
+
+		sleep(1000);
+		writeDebugStreamLine("arm = %d\n",nMotorEncoder[motorArm1]);
+		}
+		*/
 		// motor[motorLF] = 20;
 		/*
 		servo[servo2]=127;
