@@ -38,7 +38,7 @@ task main () {
   playSound(soundBeepBeep);
   while(bSoundActive) sleep(1);
 
-  // Create struct to hold sensor data
+  // Create struct to hold accelerometer sensor data
   tHTAC accelerometer;
 
   // Initialise and configure struct and port
