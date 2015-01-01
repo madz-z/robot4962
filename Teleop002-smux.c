@@ -53,14 +53,17 @@ void initializeRobot()
 	playSound(soundFastUpwardTones);
 	servo[servo_tilt] = 0;
 	servo[servo_spin] = 127;
+	servo[servo_trapdoor] = 160;
+
 	clearDebugStream();
-	servo[servo3] = 0;
-	//   sleep(500);
-	//  servo[servo3] = 180;
-	// sleep(500);
-	// servo[servo3] = 0;
-	motor[motorLift1] = 10;
-	motor[motorLift2] = 10;
+
+
+
+
+	servo[servo_front_right] = 80;
+	servo[servo_front_left] = 254;
+
+
 	return;
 }
 
@@ -108,8 +111,16 @@ task main()
 	while (true)
 	{
 
+		// *********************
+		// Read all the information from the joysticks.  This happens every 50ms (or about 20 times
+		// per second)
+		//
 		getJoystickSettings(joystick);
 		int deadzone = 20;
+
+		// **********************
+		// Driver control -- Joystick 1
+		//
 
 		//Tank Drive - Left side
 
@@ -133,7 +144,29 @@ task main()
 			motor[motorLR] = 0;
 		}
 
-		// Arm up and down
+		// rear rolling goal atttachment position
+		// FIXME: list which one is up and down
+		if (joy1Btn(7) == 1) {
+			servo[servo_rear] = 0;
+			} else if (joy1Btn(8) == 1) {
+			servo[servo_rear] = 75;
+		}
+
+		// front two rolling goal gripper servos
+		// FIXME: list which one is up and down
+		if (joy1Btn(5) == 1) {
+			servo[servo_front_right] = 80;
+			servo[servo_front_left] = 254;
+			} else if (joy1Btn(6) == 1) {
+			servo[servo_front_right] = 240;
+			servo[servo_front_left] = 100;
+		}
+
+		// **********************************************************************
+		// Arm/Lift/Intake control -- Joystick 2
+		//
+
+		// Arm up and down -- manual -- left joystick
 
 		if (joystick.joy2_y1 > deadzone) {
 			motor[motorArm1] = 30; //down
@@ -148,6 +181,40 @@ task main()
 				motor[motorArm2] = 0;
 			}
 		}
+
+
+		// Position values for accellerometer
+		// x = 0 horizontal
+		// x = 187 vertical
+		// x = -145 start position
+		// x = -180 lowest
+
+
+		// automatic positioning to vertical for arm
+
+		if (joy2Btn(7)== 1 && readSensor(&accelerometer)) {
+			writeDebugStreamLine("accel = %d\n",accelerometer.x);
+			if (accelerometer.x < 185 && accelerometer.z > 0) {
+				motor[motorArm1] = -30; //up
+				motor[motorArm2] = -30; //up
+				} else if (accelerometer.x < 185 && accelerometer.z < 0) {
+				motor[motorArm1] = 30;
+				motor[motorArm2] = 30;
+				} else {
+				motor[motorArm1] = 0;
+				motor[motorArm2] = 0;
+			}
+		}
+
+
+		// automaticaly tilt the tray unless overriden bu button
+		readSensor(&accelerometer);
+		float tiltpercent = (accelerometer.x + 183.) / 370.;
+		int tiltservoval = 200 - (tiltpercent * 200.);
+		servo[servo_tilt] = tiltservoval;
+		//writeDebugStreamLine("accel X = %d Z = %d percent= %f tiltsesrvoval = %d\n",accelerometer.x, accelerometer.z, tiltpercent, tiltservoval);
+
+
 
 		//lift up and down
 
@@ -184,38 +251,15 @@ task main()
 			} else {
 			servo[servo_spin] = 127;  // stop
 		}
-		if (joy1Btn(7) == 1) {
-			servo[servo_rear] = 0;
-			} else if (joy1Btn(8) == 1) {
-			servo[servo_rear] = 75;
-			}
-		if (joy1Btn(5) == 1) {
-			servo[servo_front_right] = 80;
-		  servo[servo_front_left] = 240;
-	  } else if (joy1Btn(6) == 1) {
-	    servo[servo_front_right] = 240;
-			servo[servo_front_left] = 100;
+
+		if (joy2Btn(3) == 1) {
+			servo[servo_trapdoor] = 0;  // open
+			} else if (joy2Btn(4) == 1) {
+			servo[servo_trapdoor] = 160;  // close
 		}
 
 
-		// x = 0 horizontal
-		// x = 187 vertical
-		// x = -145 start position
-		// x = -180 lowest
 
-		if (joy2Btn(7)== 1 && readSensor(&accelerometer)) {
-			writeDebugStreamLine("accel = %d\n",accelerometer.x);
-			if (accelerometer.x < 185 && accelerometer.z > 0) {
-				motor[motorArm1] = -30; //up
-				motor[motorArm2] = -30; //up
-				} else if (accelerometer.x < 185 && accelerometer.z < 0) {
-				motor[motorArm1] = 30;
-				motor[motorArm2] = 30;
-				} else {
-				motor[motorArm1] = 0;
-				motor[motorArm2] = 0;
-			}
-		}
 		/*
 		if (joy2Btn(3) == 1) {
 		// go to position -- 1120 ticks is one rotation for AndyMark Neverest
