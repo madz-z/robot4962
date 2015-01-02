@@ -4,14 +4,14 @@
 #pragma config(Sensor, S2,     ,               sensorI2CMuxController)
 #pragma config(Sensor, S3,     HTMUX3,         sensorI2CCustom)
 #pragma config(Sensor, S4,     gyro,           sensorI2CHiTechnicGyro)
-#pragma config(Motor,  mtr_S1_C1_1,     motorLF,       tmotorTetrix, openLoop, reversed, driveLeft, encoder)
-#pragma config(Motor,  mtr_S1_C1_2,     motorLR,       tmotorTetrix, openLoop, reversed, driveLeft, encoder)
-#pragma config(Motor,  mtr_S1_C2_1,     motorRF,       tmotorTetrix, openLoop, driveRight, encoder)
-#pragma config(Motor,  mtr_S1_C2_2,     motorRR,       tmotorTetrix, openLoop, driveRight, encoder)
-#pragma config(Motor,  mtr_S1_C3_1,     motorArm1,     tmotorTetrix, openLoop)
-#pragma config(Motor,  mtr_S1_C3_2,     motorArm2,     tmotorTetrix, openLoop, reversed)
-#pragma config(Motor,  mtr_S2_C2_1,     motorLift1,    tmotorTetrix, openLoop)
-#pragma config(Motor,  mtr_S2_C2_2,     motorLift2,    tmotorTetrix, openLoop, reversed)
+#pragma config(Motor,  mtr_S1_C1_1,     motorLF,       tmotorTetrix, PIDControl, reversed, driveLeft, encoder)
+#pragma config(Motor,  mtr_S1_C1_2,     motorLR,       tmotorTetrix, PIDControl, reversed, driveLeft, encoder)
+#pragma config(Motor,  mtr_S1_C2_1,     motorRF,       tmotorTetrix, PIDControl, driveRight, encoder)
+#pragma config(Motor,  mtr_S1_C2_2,     motorRR,       tmotorTetrix, PIDControl, driveRight, encoder)
+#pragma config(Motor,  mtr_S1_C3_1,     motorArm1,     tmotorTetrix, PIDControl)
+#pragma config(Motor,  mtr_S1_C3_2,     motorArm2,     tmotorTetrix, PIDControl, reversed)
+#pragma config(Motor,  mtr_S2_C2_1,     motorLift1,    tmotorTetrix, openLoop, encoder)
+#pragma config(Motor,  mtr_S2_C2_2,     motorLift2,    tmotorTetrix, openLoop, reversed, encoder)
 #pragma config(Servo,  srvo_S2_C1_1,    servo_front_right,    tServoStandard)
 #pragma config(Servo,  srvo_S2_C1_2,    servo_front_left,     tServoStandard)
 #pragma config(Servo,  srvo_S2_C1_3,    servo_rear,           tServoStandard)
@@ -43,12 +43,13 @@
 
 #include "hitechnic-accelerometer.h"
 #include "lego-ultrasound.h"
+#include "hitechnic-gyro.h"
 #include "JoystickDriver.c"  //Include file to "handle" the Bluetooth messages.
 
 
 #define accel msensor_S3_1 //
 
-const tMUXSensor LEGOUS = msensor_S3_2;
+//const tMUXSensor LEGOUS = msensor_S3_2;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -66,7 +67,7 @@ void initializeRobot()
 	// Place code here to sinitialize servos to starting positions.
 	// Sensors are automatically configured and setup by ROBOTC. They may need a brief time to stabilize.
 	playSound(soundFastUpwardTones);
-  	servo[servo_spin] = 0;
+	servo[servo_spin] = 127;
 
 	return;
 }
@@ -101,37 +102,115 @@ void initializeRobot()
 
 task main()
 {
+	// Create struct to hold accelerometer sensor data
+	tHTAC accelerometer;
 
+	// Initialise and configure struct and port
+	initSensor(&accelerometer, accel);
 	initializeRobot();
 	//
-	  waitForStart();   // wait for start of tele-op phase
+	waitForStart();   // wait for start of tele-op phase
+	float degreesOffHeading = 0;
+	int initialReading = SensorValue(gyro);
+
+	float power = -100;
+	float gain = 10;
+	motor[motorRF] = power;
+	motor[motorRR] = power;
+	motor[motorLF] = power;
+	motor[motorLR] = power;
+
+	while ( nMotorEncoder[motorRF] > -(48*89.2)) {
+		wait1Msec(10);
+		int currentGyroReading = SensorValue(gyro) - initialReading;
+		degreesOffHeading += currentGyroReading * 0.01;
+
+		float powerLeft = power - (gain * degreesOffHeading);
+		float powerRight = power + (gain * degreesOffHeading);
+		motor[motorRF] = powerRight;
+		motor[motorRR] = powerRight;
+		motor[motorLF] = powerLeft;
+		motor[motorLR] = powerLeft;
+		writeDebugStreamLine("gyro = %d start = %d degOffHeading = %f enc1 = %d\n",currentGyroReading,initialReading, degreesOffHeading, nMotorEncoder[motorRF]);
 
 
-		///////////////////////////////////////////////////////////
-		///////////////////////////////////////////////////////////
-		////                                                   ////
-		////      Add your robot specific tele-op code here.   ////
-		////                                                   ////
-		///////////////////////////////////////////////////////////
-		///////////////////////////////////////////////////////////
-		//motor[motorLF] = 30;
-	  short dist = 999; // initialize to something big (cm)
-      dist = USreadDist(LEGOUS);
-while(dist > 20) {
-	    // Read the current distance detected.
-      dist = USreadDist(LEGOUS);
-			motor[motorRF] = -20;
-			motor[motorRR] = -20;
-
-			motor[motorLF] = -20;
-			motor[motorLR] = -20;
-			writeDebugStreamLine("dist in cm = %d\n",dist);
+		/*
+		if (degreesOffHeading > 0) {
+		motor[motorRF] = -10;
+		motor[motorRR] = -10;
+		motor[motorLF] = -30;
+		motor[motorLR] = -30;
+		} else if (degreesOffHeading < 0) {
+		motor[motorRF] = -30;
+		motor[motorRR] = -30;
+		motor[motorLF] = -10;
+		motor[motorLR] = -10;
+		} else {
+		motor[motorRF] = -30;
+		motor[motorRR] = -30;
+		motor[motorLF] = -30;
+		motor[motorLR] = -30;
 		}
-		motor[motorRF] = 0;
+		*/
+	}
+	motor[motorRF] = 0;
+	motor[motorRR] = 0;
+	motor[motorLF] = 0;
+	motor[motorLR] = 0;
+}
+/*
+nMotorEncoder[motorLift1] = 0;
+nMotorEncoder[motorLift2] = 0;
+nMotorEncoderTarget[motorLift1] = -2000;
+nMotorEncoderTarget[motorLift2] = -2000;
+wait1Msec(50);
+motor[motorLift1] = 60;
+motor[motorLift2] = 60;
+readSensor(&accelerometer);
+while(nMotorRunState[motorLift1] != runStateIdle)
+{ 		writeDebugStreamLine("accel X = %d Z = %d  enc1 = %d enc2 = %d\n",accelerometer.x, accelerometer.z, nMotorEncoder[motorLift1], nMotorEncoder[motorLift2]);
 
-			motor[motorRR] = 0;
+// This is an idle loop. The program waits until the condition is satisfied
+}
+//	motor[motorLift1] = 0; //Turn off motorB
+//	motor[motorLift2] = 0; //Turn off motorC
 
-			motor[motorLF] = 0;
-			motor[motorLR] = 0;
+
+// AndyMark Neverrest Encoder = 1120 tics per rotation
+// wheels = 4 in diameter
+// 1 rotation = 4 in * 3.14 = 12.56 in
+// tics / inch = 1120 / 12.56 = 89.2
+
+//nMotorEncoder[motorRF] = 0;
+
+
+///////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////
+////                                                   ////
+////      Add your robot specific tele-op code here.   ////
+////                                                   ////
+///////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////
+//motor[motorLF] = 30;
+/*
+short dist = 999; // initialize to something big (cm)
+dist = USreadDist(LEGOUS);
+while(dist > 20) {
+// Read the current distance detected.
+dist = USreadDist(LEGOUS);
+motor[motorRF] = -20;
+motor[motorRR] = -20;
+
+motor[motorLF] = -20;
+motor[motorLR] = -20;
+writeDebugStreamLine("dist in cm = %d\n",dist);
+}
+motor[motorRF] = 0;
+
+motor[motorRR] = 0;
+
+motor[motorLF] = 0;
+motor[motorLR] = 0;
 
 }
+*/
