@@ -93,17 +93,48 @@ int initialReading = SensorValue(gyro);
 void driveStraight (float power, float gain) {
 	int currentGyroReading = SensorValue(gyro) - initialReading;
 	degreesOffHeading += (currentGyroReading * 0.01);
-
+	// is negative drifting to left?
 	float powerLeft = power - (gain * degreesOffHeading);
+	if (powerLeft > 100) powerLeft = 100;
+	if (powerLeft < -100) powerLeft = -100;
 	float powerRight = power + (gain * degreesOffHeading);
+	if (powerRight > 100) powerRight = 100;
+	if (powerRight < -100) powerRight = -100;
 	motor[motorRF] = powerRight;
 	motor[motorRR] = powerRight;
 	motor[motorLF] = powerLeft;
 	motor[motorLR] = powerLeft;
-	writeDebugStreamLine("gyro = %d start = %d degOffHeading = %f enc1 = %d\n",currentGyroReading,initialReading, degreesOffHeading, nMotorEncoder[motorRF]);
+	writeDebugStreamLine("gyro = %d start = %d degOffHeading = %f enc1 = %d powR = %f powL = %f\n",
+	currentGyroReading,initialReading, degreesOffHeading, nMotorEncoder[motorRF], powerRight, powerLeft);
 }
 
+void turnToHeading (float heading) {
+	int notdone = 1;
+	while (notdone) {
+		int currentGyroReading = SensorValue(gyro) - initialReading;
+		degreesOffHeading += (currentGyroReading * 0.05); // same as sleep value
+		if (degreesOffHeading > heading) {
+			motor[motorRF] = 30;
+			motor[motorRR] = 30;
+			motor[motorLF] = -30;
+			motor[motorLR] = -30;
+			} else if (degreesOffHeading < heading) {
+			motor[motorRF] = -30;
+			motor[motorRR] = -30;
+			motor[motorLF] = 30;
+			motor[motorLR] = 30;
+			}
+			if (abs(degreesOffHeading-heading) < 0.5) notdone = 0;
 
+			writeDebugStreamLine("gyro = %d start = %d degOffHeading = %f enc1 = %d \n",
+				currentGyroReading,initialReading, degreesOffHeading, nMotorEncoder[motorRF]);
+				sleep(50);
+	}
+				motor[motorRF] = 0;
+			motor[motorRR] = 0;
+			motor[motorLF] = 0;
+			motor[motorLR] = 0;
+}
 // stop all drive motors
 
 void allStop () {
@@ -122,8 +153,12 @@ void allStop () {
 // x = -180 lowest
 
 float moveArmToPosition(float armPosition) {
-	readSensor(&accelerometer);
-		writeDebugStreamLine("arm accel = %d\n",accelerometer.x);
+if (!readSensor(&accelerometer)) {
+      displayTextLine(4, "ERROR!!");
+      writeDebugStreamLine("ERROR!\n");
+    }
+//readSensor(&accelerometer);
+	writeDebugStreamLine("arm accel = %d\n",accelerometer.x);
 	if (accelerometer.x < (armPosition-5.)) {
 		motor[motorArm1] = -20; //up
 		motor[motorArm2] = -20; //up
@@ -145,60 +180,64 @@ float moveArmToPosition(float armPosition) {
 	float errorval = accelerometer.x - armPosition;
 	return (errorval);
 }
-/********************************************************/
+
 task main()
 {
 
-// Initialise and configure struct and port
-initSensor(&accelerometer, accel);
-initializeRobot();
-//
-waitForStart();   // wait for start of tele-op phase
+	// Initialise and configure struct and port
+	initSensor(&accelerometer, accel);
+	initializeRobot();
+	//
+	waitForStart();   // wait for start of tele-op phase
 
-// AndyMark Neverrest Encoder = 1120 tics per rotation
-// wheels = 4 in diameter
-// 1 rotation = 4 in * 3.14 = 12.56 in
-// tics / inch = 1120 / 12.56 = 89.2
-// there are 89.2 encoder ticks in one inch
-float ticksPerInch = 89.2;
+	// AndyMark Neverrest Encoder = 1120 tics per rotation
+	// wheels = 4 in diameter
+	// 1 rotation = 4 in * 3.14 = 12.56 in
+	// tics / inch = 1120 / 12.56 = 89.2
+	// there are 89.2 encoder ticks in one inch
+	float ticksPerInch = 89.2;
 
-float power = -100; // negative is forward
-float gain = 50;
+	float power = -80; // negative is forward
+	float gain = 50;
 
-while ( nMotorEncoder[motorRF] > -(48*ticksPerInch)) {
-	wait1Msec(10);
-	driveStraight ( power, gain);
-	//moveArmToPosition(90.);
-}
-allStop ();
-wait1Msec(1000);
+	//turnToHeading(-90.);
+	//return;
+	while ( nMotorEncoder[motorRF] > -(90*ticksPerInch)) {
+		wait1Msec(10);
+		driveStraight ( power, gain);
+		moveArmToPosition(90.);
+	}
+	allStop ();
+	motor[motorArm1] = 0; // make sub routine
+	motor[motorArm2] = 0;
+	wait1Msec(1000);
 
-nMotorEncoder[motorRF] = 0; //reset encoder
-power = 100;
+	nMotorEncoder[motorRF] = 0; //reset encoder
+	power = 80;
 
 
-while ( nMotorEncoder[motorRF] < (48*ticksPerInch)) {
-	wait1Msec(10);
-	driveStraight ( power, gain);
-}
-allStop();
-		motor[motorArm1] = 0;
-		motor[motorArm2] = 0;
+	while ( nMotorEncoder[motorRF] < (90*ticksPerInch)) {
+		wait1Msec(10);
+		driveStraight ( power, gain);
+	}
+	allStop();
+	motor[motorArm1] = 0;
+	motor[motorArm2] = 0;
+	/*
+	while (moveArmToPosition(0.) < 5 || moveArmToPosition(0.) > -5) {}
+	motor[motorArm1] = 0;
+	motor[motorArm2] = 0;
+	wait1Msec(2000);
+	while (moveArmToPosition(90.) < 5 || moveArmToPosition(90.) > -5) {}
+	motor[motorArm1] = 0;
+	motor[motorArm2] = 0;
+	wait1Msec(2000);
+	while (moveArmToPosition(-145.) < 5 || moveArmToPosition(-145.) > -5) {}
+	motor[motorArm1] = 0;
+	motor[motorArm2] = 0;
 
-while (moveArmToPosition(0.) < 5 || moveArmToPosition(0.) > -5) {}
-		motor[motorArm1] = 0;
-		motor[motorArm2] = 0;
-wait1Msec(2000);
-while (moveArmToPosition(90.) < 5 || moveArmToPosition(90.) > -5) {}
-		motor[motorArm1] = 0;
-		motor[motorArm2] = 0;
-wait1Msec(2000);
-while (moveArmToPosition(-145.) < 5 || moveArmToPosition(-145.) > -5) {}
-		motor[motorArm1] = 0;
-		motor[motorArm2] = 0;
-
-wait1Msec(5000);
-
+	wait1Msec(5000);
+	*/
 }
 /*
 nMotorEncoder[motorLift1] = 0;
